@@ -1,0 +1,9 @@
+{
+  "challenge_id": "aicrowd-neurips-2020-minerl-challenge",
+  "grader_id": "aicrowd-neurips-2020-minerl-challenge",
+  "authors": ["Anssi Kanervisto"],
+  "description": "Template code random agent submission",
+  "license": "MIT",
+  "tags": "RL",
+  "gpu": false
+}

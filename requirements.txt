@@ -1,0 +1,10 @@
+crowdai_api
+minerl
+coloredlogs
+matplotlib
+opencv-python
+pyro4
+numpy
+torch
+gym
+dill

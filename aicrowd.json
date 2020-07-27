@@ -2,7 +2,7 @@
   "challenge_id": "aicrowd-neurips-2020-minerl-challenge",
   "grader_id": "aicrowd-neurips-2020-minerl-challenge",
   "authors": ["Anssi Kanervisto"],
-  "description": "Template code random agent submission",
+  "description": "A clever-er random agent, courtesy of Guss (Kmeans random agent)",
   "license": "MIT",
   "tags": "RL",
   "gpu": false

@@ -34,21 +34,43 @@ parser = Parser('performance/',
                 submission_timeout=MINERL_TRAINING_TIMEOUT * 60,
                 initial_poll_timeout=600)
 
+
+# My variables
+HDF5_DATA_FILE = "train/data.hdf5"
+ACTION_CENTROIDS_FILE = "train/action_centroids.npy"
+
+
 def main():
     """
     This function will be called for training phase.
     """
-    # How to sample minerl data is document here:
-    # http://minerl.io/docs/tutorials/data_sampling.html
-    data = minerl.data.make(MINERL_GYM_ENV, data_dir=MINERL_DATA_ROOT)
+    from utils.handle_dataset import store_subset_to_hdf5
+    from wrappers.action_wrappers import fit_kmeans
 
-    # Sample code for illustration, add your training code below
-    env = gym.make(MINERL_GYM_ENV)
+    # Turn dataset into HDF5
+    store_subset_to_hdf5(
+        [
+            "MineRLTreechopVectorObf-v0",
+            "MineRLObtainIronPickaxeVectorObf-v0",
+            "MineRLObtainDiamondVectorObf-v0"
+        ],
+        MINERL_DATA_ROOT,
+        HDF5_DATA_FILE
+    )
 
-    # Save trained model to train/ directory
-    # Training 100% Completed
-    aicrowd_helper.register_progress(1)
-    #env.close()
+    aicrowd_helper.register_progress(0.50)
+
+    # Fit Kmeans on actions
+    # Suuuuuper-elegant argument passing, thanks
+    # to the big-brain use of argparse
+    kmean_params = [
+        "data", HDF5_DATA_FILE,
+        "output", ACTION_CENTROIDS_FILE,
+        "--n-clusters", "150"
+    ]
+    fit_kmeans(kmean_params)
+
+    aicrowd_helper.register_progress(1.00)
 
 
 if __name__ == "__main__":

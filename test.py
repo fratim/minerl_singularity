@@ -1,11 +1,15 @@
+import os
+# To speed things up. This speeds things up
+# by avoiding any parallelization of the
+# numpy computations, which seem to
+# happen bunch with VectorObf envs.
+os.environ["OMP_NUM_THREADS"] = "1"
 
 import json
 import select
 import time
 import logging
-import os
 import threading
-
 
 from typing import Callable
 
@@ -149,10 +153,31 @@ class MineRLRandomAgent(MineRLAgentBase):
             single_episode_env.step(random_act)
 
 
+class MineRLRandomKMeansAgent(MineRLAgentBase):
+    """A random agent based on kmeans actions"""
+
+    def load_agent(self):
+        # Fixed parameters
+        self.centroids = np.load("train/action_centroids.npy")
+        # Fixed frameskip, courtesy of Guss (from the baseline example)
+        self.frameskip = 10
+
+    def run_agent_on_episode(self, single_episode_env: Episode):
+        obs = single_episode_env.reset()
+        done = False
+        while not done:
+            random_act = self.centroids[np.random.randint(0, self.centroids.shape[0])]
+            random_act = {"vector": random_act}
+            for i in range(self.frameskip):
+                obs, reward, done, _ = single_episode_env.step(random_act)
+                if done:
+                    break
+
+
 #####################################################################
 # IMPORTANT: SET THIS VARIABLE WITH THE AGENT CLASS YOU ARE USING 
 ######################################################################
-AGENT_TO_TEST = MineRLRandomAgent
+AGENT_TO_TEST = MineRLRandomKMeansAgent
 
 
 ####################

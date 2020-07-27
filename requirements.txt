@@ -8,3 +8,6 @@ numpy
 torch
 gym
 dill
+scikit-learn
+h5py
+tqdm

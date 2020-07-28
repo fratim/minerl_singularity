@@ -47,6 +47,9 @@ def main():
     from utils.handle_dataset import store_subset_to_hdf5
     from wrappers.action_wrappers import fit_kmeans
 
+    # For Round1: Skip training, just jump into testing
+    return
+
     # Turn dataset into HDF5
     store_subset_to_hdf5(
         [

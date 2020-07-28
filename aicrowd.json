@@ -4,6 +4,6 @@
   "authors": ["Anssi Kanervisto"],
   "description": "A clever-er random agent, courtesy of Guss (Kmeans random agent)",
   "license": "MIT",
-  "tags": "RL",
+  "tags": "IL",
   "gpu": false
 }

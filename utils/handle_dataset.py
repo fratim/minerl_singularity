@@ -48,6 +48,7 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
         /dones
         /reward_to_go                (aka undiscounted return)
         /discounted_returns_.99      (returns discounted with gamma=0.99)
+        /episode_times               (timesteps played in the episode)
         /episodes/episode_starts     (where new episodes start)
 
     TODO There is no guarantee that the stored data will be sequential, or
@@ -89,7 +90,8 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
             "rewards",
             "dones",
             "reward_to_go",
-            "discounted_returns_.99"
+            "discounted_returns_.99",
+            "episode_times"
         ]
     )
     dataset_spaces = (
@@ -105,6 +107,8 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
             # Returns
             gym.spaces.Box(shape=(1,), dtype=np.float32, low=-np.inf, high=np.inf),
             gym.spaces.Box(shape=(1,), dtype=np.float32, low=-np.inf, high=np.inf),
+            # Episode time
+            gym.spaces.Box(shape=(1,), dtype=np.uint32, low=0, high=np.inf),
         ]
     )
     datasets = {}
@@ -119,6 +123,7 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
 
     # Read through dataset again and store items
     idx = 0
+    episode_time = 0
     last_action = None
     action_repeat_num = 0
     # Keep track where episodes start
@@ -148,10 +153,13 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
                 else:
                     action_repeat_num += 1
                 datasets["actions/start_of_new_action"][idx] = 1 if action_repeat_num == 1 else 0
+                datasets["episode_times"][idx] = episode_time
+                episode_time += 1
                 # Store other stuff
                 datasets["rewards"][idx] = rewards[0, i]
                 datasets["dones"][idx] = np.uint8(dones[0, i])
                 if dones[0, i]:
+                    episode_time = 0
                     last_action = None
                     episode_starts.append(idx + 1)
 
@@ -164,7 +172,7 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
     dataset_return = datasets["discounted_returns_.99"]
     rewards = datasets["rewards"]
     dones = datasets["dones"]
-    for i in range(idx - 1, -1, -1):
+    for i in tqdm(range(idx - 1, -1, -1), desc="post-process"):
         if dones[i]:
             reward_to_go = 0
             current_return = 0
@@ -175,7 +183,10 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
 
     # Add episode_starts dataset
     episode_starts_np = store_file.create_dataset("episodes/episode_starts", shape=(len(episode_starts),), dtype=np.int64)
-    episode_starts_np[:] = np.array(episode_starts)[:]
+    # Manual copy because otherwise did not seem
+    # to want to copy stuff
+    for i in range(len(episode_starts)):
+        episode_starts_np[i] = episode_starts[i]
 
     print("{} experiences moved into hdf5 file".format(idx))
 

@@ -38,6 +38,7 @@ parser = Parser('performance/',
 # My variables
 HDF5_DATA_FILE = "train/data.hdf5"
 ACTION_CENTROIDS_FILE = "train/action_centroids.npy"
+TRAINED_MODEL_PATH = "train/trained_model.th"
 
 
 def main():
@@ -45,7 +46,9 @@ def main():
     This function will be called for training phase.
     """
     from utils.handle_dataset import store_subset_to_hdf5
-    from wrappers.action_wrappers import fit_kmeans
+    from wrappers.action_wrappers import fit_kmeans, update_hdf5_with_centroids
+    from train_bc import main as main_train_bc
+    from train_bc import parser as train_bc_parser
 
     # For Round1: Skip training, just jump into testing
     return
@@ -61,7 +64,7 @@ def main():
         HDF5_DATA_FILE
     )
 
-    aicrowd_helper.register_progress(0.50)
+    aicrowd_helper.register_progress(0.25)
 
     # Fit Kmeans on actions
     # Suuuuuper-elegant argument passing, thanks
@@ -73,8 +76,34 @@ def main():
     ]
     fit_kmeans(kmean_params)
 
-    aicrowd_helper.register_progress(1.00)
+    aicrowd_helper.register_progress(0.50)
 
+    # Update centroid locations in the data
+    update_hdf5_params = [
+        HDF5_DATA_FILE,
+        ACTION_CENTROIDS_FILE
+    ]
+    update_hdf5_with_centroids(update_hdf5_params)
+
+    aicrowd_helper.register_progress(0.75)
+
+    # Train model with behavioural cloning
+    bc_train_params = [
+        HDF5_DATA_FILE,
+        TRAINED_MODEL_PATH,
+        "--num-epochs", "65",
+        "--include-frameskip", "16",
+        "--discrete-actions",
+        "--num-discrete-actions", "150",
+        "--frameskip-from-vector",
+        "--batch-size", "32",
+        "--lr", "0.0000625",
+        "--weight-decay", "1e-5",
+        "--resnet", "ResNetHeadFor64x64DoubleFilters"
+    ]
+    parsed_args, remaining_args = train_bc_parser.parse_known_args(bc_train_params)
+    main_train_bc(parsed_args, remaining_args)
+    aicrowd_helper.register_progress(1.0)
 
 if __name__ == "__main__":
     main()

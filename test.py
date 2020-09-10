@@ -20,6 +20,11 @@ import abc
 import numpy as np
 
 import coloredlogs
+
+# My imports
+import torch
+from torch_codes.modules import IMPALANetwork
+
 coloredlogs.install(logging.DEBUG)
 
 # All the evaluations will be evaluated on MineRLObtainDiamondVectorObf-v0 environment
@@ -174,10 +179,60 @@ class MineRLRandomKMeansAgent(MineRLAgentBase):
                     break
 
 
+class TorchDiscreteActionPolicy(MineRLAgentBase):
+    """
+    Agent using a PyTorch network to predict
+    discrete actions, which are mapped to action
+    vectors with given clusters.
+    """
+
+    def load_agent(self):
+        # TODO hardcoded settings
+        self.centroids = np.load("train/action_centroids.npy")
+        self.model = torch.load("train/trained_model.th").cuda()
+
+    def _step(self, obs):
+        # Add/remove batch dims
+        prediction = self.model(
+            torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None]).cuda(),
+            torch.from_numpy(obs["vector"][None]).float().cuda()
+        )
+
+        action_prediction = prediction["action"][0]
+
+        action_prediction = torch.softmax(action_prediction, 0).cpu().detach().numpy()
+        # Sample action
+        action = np.random.choice(np.arange(len(action_prediction)), p=action_prediction)
+        action = int(action)
+
+        # Convert to action vector
+        action = self.centroids[action]
+
+        frameskip = 1
+        if "frameskip" in prediction.keys():
+            frameskip_probs = torch.softmax(prediction["frameskip"][0], 0).cpu().detach().numpy()
+            # Sample frameskip to do
+            frameskip = np.random.choice(np.arange(len(frameskip_probs)), p=frameskip_probs)
+            # Add +1, because that is single action
+            frameskip += 1
+
+        return action, frameskip
+
+    def run_agent_on_episode(self, single_episode_env: Episode):
+        obs = single_episode_env.reset()
+        done = False
+        while not done:
+            action, frameskip = self._step(obs)
+            action = {"vector": action}
+            for i in range(self.frameskip):
+                obs, reward, done, _ = single_episode_env.step(action)
+                if done:
+                    break
+
 #####################################################################
 # IMPORTANT: SET THIS VARIABLE WITH THE AGENT CLASS YOU ARE USING 
 ######################################################################
-AGENT_TO_TEST = MineRLRandomKMeansAgent
+AGENT_TO_TEST = TorchDiscreteActionPolicy
 
 
 ####################

@@ -224,7 +224,7 @@ class TorchDiscreteActionPolicy(MineRLAgentBase):
         while not done:
             action, frameskip = self._step(obs)
             action = {"vector": action}
-            for i in range(self.frameskip):
+            for i in range(frameskip):
                 obs, reward, done, _ = single_episode_env.step(action)
                 if done:
                     break

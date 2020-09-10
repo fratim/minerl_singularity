@@ -1,9 +1,9 @@
 {
   "challenge_id": "aicrowd-neurips-2020-minerl-challenge",
   "grader_id": "aicrowd-neurips-2020-minerl-challenge",
-  "authors": ["Anssi Kanervisto"],
-  "description": "A clever-er random agent, courtesy of Guss (Kmeans random agent)",
+  "authors": ["Anssi Kanervisto", "Christian Scheller", "Yanick Schraner"],
+  "description": "Good ol' behavioural cloning",
   "license": "MIT",
   "tags": "IL",
-  "gpu": false
+  "gpu": true
 }

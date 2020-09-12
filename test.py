@@ -189,7 +189,7 @@ class TorchDiscreteActionPolicy(MineRLAgentBase):
     def load_agent(self):
         # TODO hardcoded settings
         self.centroids = np.load("train/action_centroids.npy")
-        self.model = torch.load("train/trained_model.th", map_device="cpu")
+        self.model = torch.load("train/trained_model.th", map_location="cpu")
 
     def _step(self, obs):
         # Add/remove batch dims

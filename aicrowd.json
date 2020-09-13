@@ -2,7 +2,7 @@
   "challenge_id": "aicrowd-neurips-2020-minerl-challenge",
   "grader_id": "aicrowd-neurips-2020-minerl-challenge",
   "authors": ["Anssi Kanervisto", "Christian Scheller", "Yanick Schraner"],
-  "description": "Good ol' behavioural cloning, running on CPU though",
+  "description": "Good ol' behavioural cloning",
   "license": "MIT",
   "tags": "IL",
   "gpu": true

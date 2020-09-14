@@ -13,7 +13,6 @@ dependencies:
     - coloredlogs
     - matplotlib
     - pyro4
-    - opencv-python<4.3
     - numpy
     - torch
     - gym

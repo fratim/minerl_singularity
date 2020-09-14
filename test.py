@@ -189,13 +189,13 @@ class TorchDiscreteActionPolicy(MineRLAgentBase):
     def load_agent(self):
         # TODO hardcoded settings
         self.centroids = np.load("train/action_centroids.npy")
-        self.model = torch.load("train/trained_model.th", map_location="cpu")
+        self.model = torch.load("train/trained_model.th")
 
     def _step(self, obs):
         # Add/remove batch dims
         prediction = self.model(
-            torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None]),
-            torch.from_numpy(obs["vector"][None]).float()
+            torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None]).cuda(),
+            torch.from_numpy(obs["vector"][None]).float().cuda()
         )
 
         action_prediction = prediction["action"][0]

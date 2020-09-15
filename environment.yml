@@ -3,10 +3,10 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.7
+  - python=3.6
   - pip
   - py-opencv
-  - cudatoolkit=10.2
+  - pytorch
   - pip:
     - crowdai_api
     - minerl
@@ -14,8 +14,6 @@ dependencies:
     - matplotlib
     - pyro4
     - numpy
-    - torch
-    - gym
     - dill
     - scikit-learn
     - h5py

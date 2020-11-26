@@ -2,11 +2,12 @@ name: minerl
 channels:
   - conda-forge
   - defaults
+  - pytorch
 dependencies:
   - python=3.8
   - pip
   - py-opencv
-  - cudatoolkit=10.1
+  - pytorch=1.7.0
   - pip:
     - crowdai_api
     - minerl
@@ -18,4 +19,3 @@ dependencies:
     - scikit-learn
     - h5py
     - tqdm
-    - torch==1.7.0

@@ -7,7 +7,7 @@ dependencies:
   - python=3.8
   - pip
   - py-opencv
-  - pytorch=1.7.0
+  - pytorch
   - pip:
     - crowdai_api
     - minerl

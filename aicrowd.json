@@ -2,7 +2,7 @@
   "challenge_id": "aicrowd-neurips-2020-minerl-challenge",
   "grader_id": "aicrowd-neurips-2020-minerl-challenge",
   "authors": ["Anssi Kanervisto", "Christian Scheller", "Yanick Schraner"],
-  "description": "Good ol' behavioural cloning, now hopefully with GPU",
+  "description": "Good ol' behavioural cloning, now with LSTMs!",
   "license": "MIT",
   "tags": "IL",
   "gpu": true

@@ -177,7 +177,8 @@ class IMPALANetwork(nn.Module):
         output_dict,
         num_additional_features,
         cnn_head_class="ResNetHead",
-        latent_size=512
+        latent_size=512,
+        num_heads=None
     ):
         """
         Parameters:
@@ -190,8 +191,11 @@ class IMPALANetwork(nn.Module):
                 to use as preprocess for images
             latent_size (int): Size of the latent vector after concatenating
                 image and additional observations
+            num_heads (int): Number of different output heads. None is converted
+                to one.
         """
         super().__init__()
+        self.num_heads = num_heads if num_heads is not None else 1
         self.output_dict = OrderedDict(output_dict)
         self.total_output_size = sum(list(self.output_dict.values()))
         self.num_additional_features = num_additional_features
@@ -210,14 +214,17 @@ class IMPALANetwork(nn.Module):
         # Append additional features
         self.num_combined_features = self.cnn_feat_size + 128
 
-        # Do all outputs as one big list
-        self.final_fc = nn.Sequential(
-            nn.Linear(self.num_combined_features, latent_size),
-            nn.ReLU(),
-            nn.Linear(latent_size, self.total_output_size)
-        )
+        # Create outputs. All outputs are one big list.
+        self.final_fcs = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(self.num_combined_features, latent_size),
+                nn.ReLU(),
+                nn.Linear(latent_size, self.total_output_size)
+            )
+            for i in range(self.num_heads)
+        ])
 
-    def forward(self, image_observation, additional_features):
+    def forward(self, image_observation, additional_features, head_indeces=None):
         # Normalize image (uint8)
         x = image_observation.float() / 255.0
 
@@ -229,7 +236,16 @@ class IMPALANetwork(nn.Module):
 
         x = torch.cat((x, additional_features), dim=1)
 
-        x = self.final_fc(x)
+        if head_indeces is None:
+            x = self.final_fcs[0](x)
+        else:
+            # Run different batch elements through different heads.
+            # TODO this should probably be parallelized somehow...
+            # TODO normalize gradients?
+            out_x = torch.zeros(x.shape[0], self.total_output_size).to(x.device)
+            for batch_i in range(x.shape[0]):
+                out_x[batch_i] = self.final_fcs[head_indeces[batch_i]](x[batch_i])
+            x = out_x
 
         # Split to different dicts according to output sizes
         outputs = {}
@@ -261,6 +277,8 @@ class IMPALANetworkWithLSTM(nn.Module):
         output_dict,
         num_additional_features,
         cnn_head_class="ResNetHead",
+        latent_size=512,
+        num_heads=None
     ):
         """
         Parameters:
@@ -271,8 +289,11 @@ class IMPALANetworkWithLSTM(nn.Module):
                 features appended later
             cnn_head_class (str): Name of the class (visible to here)
                 to use as preprocess for images
+            latent_size (int): Number of units for the hidden LSTM state
         """
+        assert num_heads is None, "Sub-tasks not supported for LSTM version yet"
         super().__init__()
+        self.latent_size = latent_size
         self.output_dict = OrderedDict(output_dict)
         self.total_output_size = sum(list(self.output_dict.values()))
         self.num_additional_features = num_additional_features
@@ -284,19 +305,19 @@ class IMPALANetworkWithLSTM(nn.Module):
 
         # Run something through the network to get the shape
         self.cnn_feat_size = self.cnn_head(torch.rand(*((1,) + image_shape))).shape[1]
-        self.cnn_fc = nn.Linear(self.cnn_feat_size, 256)
+        self.cnn_fc = nn.Linear(self.cnn_feat_size, 128)
 
         # Append additional features
-        self.num_combined_features = 256 + self.num_additional_features
+        self.num_combined_features = 128 + self.num_additional_features
 
         self.lstm = nn.LSTM(
             input_size=self.num_combined_features,
-            hidden_size=256,
+            hidden_size=self.latent_size,
             num_layers=1
         )
 
         # Do all outputs as one big list
-        self.final_fc = nn.Linear(256, self.total_output_size)
+        self.final_fc = nn.Linear(self.latent_size, self.total_output_size)
 
     def get_initial_state(self, batch_size):
         """
@@ -304,21 +325,25 @@ class IMPALANetworkWithLSTM(nn.Module):
         i.e. zero vectors.
         """
         device = self.lstm.weight_hh_l0.device
-        h = torch.zeros(1, batch_size, 256).to(device)
-        c = torch.zeros(1, batch_size, 256).to(device)
+        h = torch.zeros(1, batch_size, self.latent_size).to(device)
+        c = torch.zeros(1, batch_size, self.latent_size).to(device)
         return h, c
 
-    def forward(self, image_observation, additional_features, hidden_states):
+    def forward(self, image_observation, additional_features, hidden_states=None, head_indeces=None, return_sequence=False):
         """
         Trajectory/timesteps first. Returns hidden states (h, c).
         """
+        assert hidden_states is not None, "No hidden states provided"
+        assert head_indeces is None, "Sub-tasks not supported for LSTM yet"
+
         # Normalize image (uint8)
         x = image_observation.float() / 255.0
 
         # Flatten batch and timestep axis into one to run through
-        # CNN head
+        # CNN head.
+        # Tested to work as expected with tests/test_time_parallelization.py
         x_shape = x.shape
-        x = x.view(x_shape[0] * x_shape[1], x_shape[2], x_shape[3], x_shape[4])
+        x = x.reshape(x_shape[0] * x_shape[1], x_shape[2], x_shape[3], x_shape[4])
         x = self.cnn_head(x)
         # Fully-connected
         x = F.relu(self.cnn_fc(x), inplace=True)
@@ -329,7 +354,11 @@ class IMPALANetworkWithLSTM(nn.Module):
         x = torch.cat((x, additional_features), dim=2)
 
         # Run through lstms
-        x, hidden_states = self.lstm1(x, hidden_states)
+        x, hidden_states = self.lstm(x, hidden_states)
+
+        if not return_sequence:
+            # Restrict to only last element in sequence
+            x = x[-1]
 
         # Aaaand final mapping to output
         x = self.final_fc(x)
@@ -338,7 +367,11 @@ class IMPALANetworkWithLSTM(nn.Module):
         outputs = {}
         i = 0
         for name, size in self.output_dict.items():
-            outputs[name] = x[:, i:i + size]
+            if return_sequence:
+                # Go over sequence length as well
+                outputs[name] = x[:, :, i:i + size]
+            else:
+                outputs[name] = x[:, i:i + size]
             i += size
 
         return outputs, hidden_states

@@ -37,6 +37,7 @@ parser = Parser('performance/',
 
 # My variables
 HDF5_DATA_FILE = "train/data.hdf5"
+HDF5_DATA_FILE_FRAMESKIPPED = "train/data_frameskipped.hdf5"
 ACTION_CENTROIDS_FILE = "train/action_centroids.npy"
 TRAINED_MODEL_PATH = "train/trained_model.th"
 
@@ -45,10 +46,10 @@ def main():
     """
     This function will be called for training phase.
     """
-    from utils.handle_dataset import store_subset_to_hdf5
+    from utils.handle_dataset import store_subset_to_hdf5, remove_frameskipped_samples
     from wrappers.action_wrappers import fit_kmeans, update_hdf5_with_centroids
-    from train_bc import main as main_train_bc
-    from train_bc import parser as train_bc_parser
+    from train_bc_lstm import main as main_train_bc
+    from train_bc_lstm import parser as train_bc_parser
 
     # For Round1: Skip training, just jump into testing
     return
@@ -58,13 +59,12 @@ def main():
         [
             "MineRLTreechopVectorObf-v0",
             "MineRLObtainIronPickaxeVectorObf-v0",
-            "MineRLObtainDiamondVectorObf-v0"
         ],
         MINERL_DATA_ROOT,
         HDF5_DATA_FILE
     )
 
-    aicrowd_helper.register_progress(0.25)
+    aicrowd_helper.register_progress(0.20)
 
     # Fit Kmeans on actions
     # Suuuuuper-elegant argument passing, thanks
@@ -76,7 +76,7 @@ def main():
     ]
     fit_kmeans(kmean_params)
 
-    aicrowd_helper.register_progress(0.50)
+    aicrowd_helper.register_progress(0.40)
 
     # Update centroid locations in the data
     update_hdf5_params = [
@@ -85,13 +85,22 @@ def main():
     ]
     update_hdf5_with_centroids(update_hdf5_params)
 
-    aicrowd_helper.register_progress(0.75)
+    aicrowd_helper.register_progress(0.60)
+
+    # Remove frameskipped frames for LSTM training
+    removed_frameskipped_params = [
+        HDF5_DATA_FILE,
+        HDF5_DATA_FILE_FRAMESKIPPED
+    ]
+    remove_frameskipped_samples(removed_frameskipped_params)
+
+    aicrowd_helper.register_progress(0.80)
 
     # Train model with behavioural cloning
     bc_train_params = [
-        HDF5_DATA_FILE,
+        HDF5_DATA_FILE_FRAMESKIPPED,
         TRAINED_MODEL_PATH,
-        "--num-epochs", "65",
+        "--num-epochs", "256",
         "--include-frameskip", "16",
         "--discrete-actions",
         "--num-discrete-actions", "150",
@@ -99,6 +108,9 @@ def main():
         "--batch-size", "32",
         "--lr", "0.0000625",
         "--weight-decay", "1e-5",
+        "--seq-len", "32",
+        "--horizontal-flipping",
+        "--entropy-weight", "0.0",
         "--resnet", "ResNetHeadFor64x64DoubleFilters"
     ]
     parsed_args, remaining_args = train_bc_parser.parse_known_args(bc_train_params)

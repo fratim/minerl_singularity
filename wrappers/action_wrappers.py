@@ -93,7 +93,7 @@ def fit_kmeans(remaining_args):
 
     parser = ArgumentParser("Fit k-Means to actions and save centroids")
     parser.add_argument("data", type=str, help="Path to the HDF5 file containing actions")
-    parser.add_argument("output", type=str, help="Where to store the embedding plot")
+    parser.add_argument("output", type=str, help="Where to store centroids")
     parser.add_argument("--max-points", type=int, default=int(1e7), help="Maximum number of actions to include")
     parser.add_argument("--n-clusters", type=int, default=100, help="Number of centroids to use")
     parser.add_argument("--n-init", type=int, default=30, help="Number of times to init clustering")

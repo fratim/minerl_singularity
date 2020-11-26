@@ -1,9 +1,12 @@
 #
 # Tools for modifying/handling the MineRL dataset (offline)
 #
+from argparse import ArgumentParser
 
 import numpy as np
 from tqdm import tqdm
+import h5py
+import gym
 import minerl
 
 
@@ -31,7 +34,7 @@ def store_actions_to_numpy_file(subset_name, data_dir, output_file, num_workers=
     np.save(output_file, all_actions)
 
 
-def store_subset_to_hdf5(subset_names, data_dir, output_file):
+def store_subset_to_hdf5(remaining_args):
     """
     For "VectorObf" envs only!
 
@@ -54,16 +57,17 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
     TODO There is no guarantee that the stored data will be sequential, or
          figure out a way to store data per episode.
          NOTE: Apparently this works like this
-
-    Parameters:
-        subset_names (List of str): Names of subsets to include in the data (e.g. MineRLTreechopVectorObf-v0)
-        data_dir (str): Where MineRL dataset is stored.
-        output_file (str): Where to store the HDF5 file
-        num_workers (int): Number of workers for data loader (default 4)
     """
+    parser = ArgumentParser("Convert MineRL dataset into HDF5 file")
+    parser.add_argument("--subset-names", type=str, required=True, nargs="+", help="Name of the dataset to convert")
+    parser.add_argument("data_dir", type=str, help="Location of MineRL dataset")
+    parser.add_argument("output_file", type=str, help="Location where HDF5 file should be stored")
+    args = parser.parse_args(remaining_args)
+    subset_names = args.subset_names
+    data_dir = args.data_dir
+    output_file = args.output_file
+
     assert all(map(lambda x: "Obf" in x, subset_names)), "Environments must be Obf envs"
-    import gym
-    import h5py
 
     datas = [minerl.data.make(subset_name, data_dir=data_dir, num_workers=1) for subset_name in subset_names]
 
@@ -193,12 +197,96 @@ def store_subset_to_hdf5(subset_names, data_dir, output_file):
     store_file.close()
 
 
-if __name__ == "__main__":
-    from argparse import ArgumentParser
+def remove_frameskipped_samples(remaining_args):
+    """
+    Remove all samples from hdf5 dataset that are not new actions (i.e. they are frameskipped).
 
-    parser = ArgumentParser("Convert MineRL dataset into HDF5 file")
-    parser.add_argument("--subset-names", type=str, required=True, nargs="+", help="Name of the dataset to convert")
-    parser.add_argument("data_dir", type=str, help="Location of MineRL dataset")
-    parser.add_argument("output", type=str, help="Location where HDF5 file should be stored")
-    args = parser.parse_args()
-    store_subset_to_hdf5(args.subset_names, args.data_dir, args.output)
+    Save a new dataset in output_file
+    """
+    parser = ArgumentParser("Remove frameskipped samples from MineRL HDF5 dataset")
+    parser.add_argument("input_file", type=str, help="Location of HDF5 file that should be loaded")
+    parser.add_argument("output_file", type=str, help="Location where HDF5 file should be stored")
+    parser.add_argument(
+        "--new-action-dataset",
+        type=str,
+        default="actions/start_of_new_action",
+        help="Which boolean dataset will be used to determine which samples to keep"
+    )
+    args = parser.parse_args(remaining_args)
+    input_file = args.input_file
+    output_file = args.output_file
+    new_action_dataset = args.new_action_dataset
+
+    input_file = h5py.File(input_file, "r")
+    output_file = h5py.File(output_file, "w")
+
+    # Get number of new samples
+    new_action_array = input_file[new_action_dataset][:, 0]
+    num_samples = new_action_array.sum()
+    print("Original num of samples:", new_action_array.shape[0])
+    print("New num of samples:", num_samples)
+
+    dataset_items = []
+    input_file.visititems(lambda k, v: dataset_items.append((k, v)))
+    # Only keep dataset items
+    dataset_items = [(k, v) for k, v in dataset_items if isinstance(v, h5py.Dataset)]
+
+    # Keep track where episodes start
+    episode_starts = [0]
+    # Create new datasets
+    for dataset_name, old_dataset in tqdm(dataset_items, desc="dataset"):
+
+        if old_dataset.shape[0] != len(new_action_array):
+            print("Skipping {}. Has different amount of samples than expected.".format(dataset_name))
+            new_dataset = output_file.create_dataset(dataset_name, dtype=old_dataset.dtype, shape=old_dataset.shape)
+            new_dataset[:] = old_dataset[:]
+        else:
+            new_shape = [num_samples] + list(old_dataset.shape[1:])
+            new_dataset = output_file.create_dataset(dataset_name, dtype=old_dataset.dtype, shape=new_shape)
+
+            # Do step-by-step because other indexing/masking tricks did not speed
+            # up or work as expected
+            # Special handling for "dones" array
+            if dataset_name == "dones":
+                new_index = 0
+                for old_index in tqdm(range(old_dataset.shape[0]), desc="item", leave=False):
+                    if new_action_array[old_index]:
+                        new_dataset[new_index] = old_dataset[old_index]
+                        new_index += 1
+                    # Also make sure that all done=True are included in the new
+                    # dataset. We might skip some done=True with above check.
+                    if old_dataset[old_index] == 1:
+                        new_dataset[new_index - 1] = 1
+                        episode_starts.append(new_index)
+            else:
+                new_index = 0
+                for old_index in tqdm(range(old_dataset.shape[0]), desc="item", leave=False):
+                    if new_action_array[old_index]:
+                        new_dataset[new_index] = old_dataset[old_index]
+                        new_index += 1
+            # We should have reached end by now
+            assert new_index == num_samples, "Copied {} items but should have copied {}".format(new_index, num_samples)
+
+    # Update episode_starts array
+    # Manual copy because otherwise did not seem
+    # to want to copy stuff
+    assert len(episode_starts) == output_file["episodes/episode_starts"].shape[0], "Number of episodes does not match"
+    for i in range(len(episode_starts)):
+        output_file["episodes/episode_starts"][i] = episode_starts[i]
+
+    input_file.close()
+    output_file.close()
+
+
+AVAILABLE_OPERATIONS = {
+    "minerl-to-hdf5": store_subset_to_hdf5,
+    "remove-frameskipped": remove_frameskipped_samples,
+}
+
+if __name__ == "__main__":
+    parser = ArgumentParser("Create and modify HDF5 datasets")
+    parser.add_argument("operation", choices=list(AVAILABLE_OPERATIONS.keys()), help="Operation to run")
+    args, unparsed_args = parser.parse_known_args()
+
+    operation_fn = AVAILABLE_OPERATIONS[args.operation]
+    operation_fn(unparsed_args)

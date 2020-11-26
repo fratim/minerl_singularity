@@ -282,8 +282,10 @@ class TorchDiscreteActionPolicy(MineRLAgentBase):
     def run_agent_on_episode(self, single_episode_env: Episode):
         obs = single_episode_env.reset()
         done = False
+        reward = 0
+        self.reset()
         while not done:
-            action, frameskip = self._step(obs)
+            action, frameskip = self._step(obs, reward, done)
             action = {"vector": action}
             for i in range(frameskip):
                 obs, reward, done, _ = single_episode_env.step(action)

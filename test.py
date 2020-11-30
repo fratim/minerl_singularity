@@ -195,98 +195,77 @@ class TorchDiscreteActionPolicy(MineRLAgentBase):
         # Deduce if we want to use LSTM from the model.
         # Hidden-state models should have `get_initial_state` function.
         self.lstm = hasattr(self.model, "get_initial_state")
-        self.hidden_state = None
-        # Also keep track of previous actions, frameskips and
-        # rewards for the next step.
-        self.previous_action = None
-        self.previous_frameskip = None
-        self.previous_reward = None
         # Get maximum number of frameskip and actions
         self.max_action = self.model.output_dict["action"]
         self.max_frameskip = self.model.output_dict["frameskip"]
         self.action_eye = np.eye(self.max_action)
         self.frameskip_eye = np.eye(self.max_frameskip)
 
-        self.reset()
-    
-    def _add_previous_step_info(self, vector_obs):
-        """Add previous-step info to given observation vector"""
-        processed_reward = np.array([math.log2(self.previous_reward + 1)])
-        vector_obs = np.concatenate(
-            (
-                # Mind the ordering here (must match training)
-                vector_obs,
-                self.action_eye[self.previous_action],
-                # "1 frameskip" -> [1 0 0 0 ...]
-                self.frameskip_eye[self.previous_frameskip - 1],
-                processed_reward
-            ),
-            axis=0
-        )
-        return vector_obs
-
-    def reset(self):
-        if self.lstm:
-            self.previous_action = 0
-            self.previous_frameskip = 0
-            self.previous_reward = 0
-            self.hidden_state = self.model.get_initial_state(batch_size=1)
-
-    def _step(self, obs, reward, done, subtask_id=None):
-        # Add/remove batch dims
-        # TODO fixed for the obf inputs
-        prediction = None
-        with torch.no_grad():
-            if self.lstm:
-                vector_obs = self._add_previous_step_info(obs["vector"])
-                prediction, self.hidden_state = self.model(
-                    # TODO move this transposing somewhere else...
-                    # TODO make the whole "float()"  stuff unified somehow
-                    # Add batch and time dimensions here
-                    torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None, None]).cuda(),
-                    torch.from_numpy(vector_obs[None, None]).float().cuda(),
-                    hidden_states=self.hidden_state
-                )
-            else:
-                prediction = self.model(
-                    # TODO move this transposing somewhere else...
-                    # TODO make the whole "float()"  stuff unified somehow
-                    torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None]).cuda(),
-                    torch.from_numpy(obs["vector"][None]).float().cuda(),
-                    # Add "batch_dim" to the head index as well if we are using that
-                    [subtask_id] if subtask_id is not None else None
-                )
-
-        action_prediction = prediction["action"][0]
-        action_prediction = torch.softmax(action_prediction, 0).cpu().detach().numpy()
-        # Sample action
-        action = np.random.choice(np.arange(len(action_prediction)), p=action_prediction)
-        action = int(action)
-
-        frameskip = 1
-        if "frameskip" in prediction.keys():
-            frameskip_probs = torch.softmax(prediction["frameskip"][0], 0).cpu().detach().numpy()
-            # Sample frameskip to do
-            frameskip = np.random.choice(np.arange(len(frameskip_probs)), p=frameskip_probs)
-            # Add +1, because that is single action
-            frameskip += 1
-
-        self.previous_action = action
-        self.previous_frameskip = frameskip
-        self.previous_reward = reward
-
-        action_vector = self.centroids[action]
-
-        return action_vector, frameskip
-
     def run_agent_on_episode(self, single_episode_env: Episode):
+        # Define step stuff etc here to avoid any problems with
+        # parallel calls to run_agent_on_episode
+        previous_action = 0
+        previous_frameskip = 0
+        previous_reward = 0
+        hidden_state = self.model.get_initial_state(batch_size=1)
+
         obs = single_episode_env.reset()
         done = False
         reward = 0
-        self.reset()
         while not done:
-            action, frameskip = self._step(obs, reward, done)
-            action = {"vector": action}
+            prediction = None
+            with torch.no_grad():
+                if self.lstm:
+                    processed_reward = np.array([math.log2(previous_reward + 1)])
+                    vector_obs = np.concatenate(
+                        (
+                            # Mind the ordering here (must match training)
+                            obs["vector"],
+                            self.action_eye[previous_action],
+                            # "1 frameskip" -> [1 0 0 0 ...]
+                            self.frameskip_eye[previous_frameskip - 1],
+                            processed_reward
+                        ),
+                        axis=0
+                    )
+                    prediction, hidden_state = self.model(
+                        # TODO move this transposing somewhere else...
+                        # TODO make the whole "float()"  stuff unified somehow
+                        # Add batch and time dimensions here
+                        torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None, None]).cuda(),
+                        torch.from_numpy(vector_obs[None, None]).float().cuda(),
+                        hidden_states=hidden_state
+                    )
+                else:
+                    prediction = self.model(
+                        # TODO move this transposing somewhere else...
+                        # TODO make the whole "float()"  stuff unified somehow
+                        torch.from_numpy(obs["pov"].transpose(2, 0, 1)[None]).cuda(),
+                        torch.from_numpy(obs["vector"][None]).float().cuda(),
+                        None
+                    )
+
+            action_prediction = prediction["action"][0]
+            action_prediction = torch.softmax(action_prediction, 0).cpu().detach().numpy()
+            # Sample action
+            action = np.random.choice(np.arange(len(action_prediction)), p=action_prediction)
+            action = int(action)
+
+            frameskip = 1
+            if "frameskip" in prediction.keys():
+                frameskip_probs = torch.softmax(prediction["frameskip"][0], 0).cpu().detach().numpy()
+                # Sample frameskip to do
+                frameskip = np.random.choice(np.arange(len(frameskip_probs)), p=frameskip_probs)
+                # Add +1, because that is single action
+                frameskip += 1
+
+            previous_action = action
+            previous_frameskip = frameskip
+            previous_reward = reward
+
+            action_vector = self.centroids[action]
+
+            action = {"vector": action_vector}
             for i in range(frameskip):
                 obs, reward, done, _ = single_episode_env.step(action)
                 if done:

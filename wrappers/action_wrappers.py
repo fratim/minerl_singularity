@@ -97,7 +97,7 @@ def fit_kmeans(remaining_args):
     parser.add_argument("--max-points", type=int, default=int(1e7), help="Maximum number of actions to include")
     parser.add_argument("--n-clusters", type=int, default=100, help="Number of centroids to use")
     parser.add_argument("--n-init", type=int, default=30, help="Number of times to init clustering")
-    args = parser.parse_args(remainin_args)
+    args = parser.parse_args(remaining_args)
 
     data = h5py.File(args.data, "r")
     print("Loading...")

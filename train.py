@@ -53,17 +53,19 @@ def main():
 
     # For Round1: Skip training, just jump into testing
     print("--- WARNING --- Training has been disabled for Round1 submission --- ")
+    print("---             Remove `return` from train.py:main() to run training ---")
     return
-
+    
+    aicrowd_helper.training_start()
     # Turn dataset into HDF5
-    store_subset_to_hdf5(
-        [
-            "MineRLTreechopVectorObf-v0",
-            "MineRLObtainIronPickaxeVectorObf-v0",
-        ],
+    store_subset_to_hdf5_params = [
         MINERL_DATA_ROOT,
-        HDF5_DATA_FILE
-    )
+        HDF5_DATA_FILE,
+        "--subset-names", 
+        "MineRLTreechopVectorObf-v0",
+        "MineRLObtainIronPickaxeVectorObf-v0"
+    ]
+    #store_subset_to_hdf5(store_subset_to_hdf5_params)
 
     aicrowd_helper.register_progress(0.20)
 
@@ -71,9 +73,10 @@ def main():
     # Suuuuuper-elegant argument passing, thanks
     # to the big-brain use of argparse
     kmean_params = [
-        "data", HDF5_DATA_FILE,
-        "output", ACTION_CENTROIDS_FILE,
-        "--n-clusters", "150"
+        HDF5_DATA_FILE,
+        ACTION_CENTROIDS_FILE,
+        "--n-clusters", "150",
+        "--n-init", "30"
     ]
     fit_kmeans(kmean_params)
 
@@ -101,7 +104,7 @@ def main():
     bc_train_params = [
         HDF5_DATA_FILE_FRAMESKIPPED,
         TRAINED_MODEL_PATH,
-        "--num-epochs", "256",
+        "--num-epochs", "1",
         "--include-frameskip", "16",
         "--discrete-actions",
         "--num-discrete-actions", "150",
@@ -117,6 +120,7 @@ def main():
     parsed_args, remaining_args = train_bc_parser.parse_known_args(bc_train_params)
     main_train_bc(parsed_args, remaining_args)
     aicrowd_helper.register_progress(1.0)
+    aicrowd_helper.training_end()
 
 if __name__ == "__main__":
     main()

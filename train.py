@@ -52,6 +52,7 @@ def main():
     from train_bc_lstm import parser as train_bc_parser
 
     # For Round1: Skip training, just jump into testing
+    print("--- WARNING --- Training has been disabled for Round1 submission --- ")
     return
 
     # Turn dataset into HDF5

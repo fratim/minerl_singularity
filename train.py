@@ -104,7 +104,7 @@ def main():
     bc_train_params = [
         HDF5_DATA_FILE_FRAMESKIPPED,
         TRAINED_MODEL_PATH,
-        "--num-epochs", "1",
+        "--num-epochs", "256",
         "--include-frameskip", "16",
         "--discrete-actions",
         "--num-discrete-actions", "150",

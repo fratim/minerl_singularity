@@ -108,19 +108,19 @@ def main(args, unparsed_args):
         num_additional_features,
         cnn_head_class=args.resnet,
         latent_size=LSTM_LATENT_SIZE
-    ).cuda()
+    ) #.cuda()
     optimizer = torch.optim.Adam(network.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # Keep track of hidden states per episodes ("h" and "c" components of LSTM)
     hidden_state_h = torch.zeros(
         data_sampler.num_episodes,
         LSTM_LATENT_SIZE
-    ).cuda()
+    ) #.cuda()
 
     hidden_state_c = torch.zeros(
         data_sampler.num_episodes,
         LSTM_LATENT_SIZE
-    ).cuda()
+    ) #.cuda()
 
     # Also keep track on if we should flip the images horizontally in the episode.
     # NOTE that we do not flip actions! This might be wrong, but also with LSTM
@@ -191,8 +191,8 @@ def main(args, unparsed_args):
             masked_horizontal_flip = horizontal_flip_episodes[masked_episode_indeces]
             pov[:, masked_horizontal_flip] = np.flip(pov[:, masked_horizontal_flip], 4)
 
-        pov = torch.from_numpy(pov).cuda()
-        obs_vector = torch.from_numpy(obs_vector).float().cuda()
+        pov = torch.from_numpy(pov) #.cuda()
+        obs_vector = torch.from_numpy(obs_vector).float() #.cuda()
 
         # Add the initial "num-layers shape"
         hidden_states = (
@@ -221,7 +221,7 @@ def main(args, unparsed_args):
         # TODO only learn to do the final action of the sequence
         predicted_action = network_output["action"]
         # Remove the extra dimension in the end
-        target_action = torch.from_numpy(target_action.astype(np.int64)[..., -1]).cuda()
+        target_action = torch.from_numpy(target_action.astype(np.int64)[..., -1]) #.cuda()
 
         # Maximize llk
         dist = torch.distributions.Categorical(logits=predicted_action)
@@ -235,7 +235,7 @@ def main(args, unparsed_args):
         # Action-frameskip loss
         predicted_frameskip = network_output["frameskip"]
         # Remove extra dimension in the end
-        target_frameskip = torch.from_numpy(target_frameskip[..., -1]).long().cuda()
+        target_frameskip = torch.from_numpy(target_frameskip[..., -1]).long() #.cuda()
 
         dist = torch.distributions.Categorical(logits=predicted_frameskip)
         log_prob = dist.log_prob(target_frameskip).mean()
